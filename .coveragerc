@@ -1,5 +1,5 @@
 [run]
-source = {{REPO_NAME}}
+source = lora-pytorch
 
 [report]
 exclude_lines =

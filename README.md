@@ -1,12 +1,12 @@
-# {{REPO_NAME}}
+# lora-pytorch
 
 ## Install
 
 ```bash
-pip install "{{REPO_NAME}} @ git+ssh://git@github.com/{{REPO_OWNER}}/{{REPO_NAME}}.git"
+pip install "lora-pytorch @ git+ssh://git@github.com/fkodom/lora-pytorch.git"
 
 # Install all dev dependencies (tests etc.)
-pip install "{{REPO_NAME}}[all] @ git+ssh://git@github.com/{{REPO_OWNER}}/{{REPO_NAME}}.git"
+pip install "lora-pytorch[all] @ git+ssh://git@github.com/fkodom/lora-pytorch.git"
 
 # Setup pre-commit hooks
 pre-commit install
@@ -21,10 +21,10 @@ Tests run automatically through GitHub Actions.
 
 You can also run tests manually with `pytest`:
 ```bash
-pytest {{REPO_NAME}}
+pytest lora-pytorch
 
 # For all tests, including slow ones:
-pytest --slow {{REPO_NAME}}
+pytest --slow lora-pytorch
 ```
 
 
