@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+
+import subprocess
+from pathlib import Path
+from typing import Dict, List, Optional, Union
+
+THIS_FILE = Path(__file__).expanduser().absolute()
+REPO_DIR = THIS_FILE.parent
+
+
+def get_git_info(key: str, repo_path: Path) -> str:
+    cmd = ["git", "config", key]
+    output = subprocess.run(cmd, capture_output=True, check=True, cwd=repo_path)
+    return output.stdout.decode().strip()
+
+
+def recursive_get_files(
+    root_dir: Union[Path, str], excepted_files: Optional[List[str]] = None
+) -> List[Path]:
+    if isinstance(root_dir, str):
+        root_dir = Path(root_dir)
+    if excepted_files is None:
+        excepted_files = []
+    return [x for x in root_dir.glob("**/*") if x not in excepted_files and x.is_file()]
+
+
+PLACEHOLDERS = {
+    "{{REPO_NAME}}": REPO_DIR.name,
+    "{{REPO_NAME_ALLCAPS}}": REPO_DIR.name.upper().replace("-", "_"),
+    "{{GIT_USER_NAME}}": get_git_info("user.name", REPO_DIR),
+    "{{GIT_USER_EMAIL}}": get_git_info("user.email", REPO_DIR),
+    "{{REPO_OWNER}}": get_git_info("remote.origin.url", REPO_DIR)
+    .replace("https://github.com/", "")
+    .replace("git@github.com:", "")
+    .split("/")[0],
+}
+
+EXCEPTED_FILES = [THIS_FILE] + recursive_get_files(REPO_DIR / ".git")
+
+
+def substitute_placeholders(
+    filename: Union[str, Path], placeholder_map: Dict[str, str]
+):
+    if isinstance(filename, str):
+        filename = Path(filename)
+    try:
+        with filename.open("r") as fh:
+            content = fh.read()
+    except UnicodeDecodeError:
+        # file is binary
+        return
+    changed = False
+    for placeholder, value in placeholder_map.items():
+        if placeholder in content:
+            content = content.replace(placeholder, value)
+            changed = True
+    if changed:
+        with filename.open("w") as fh:
+            fh.write(content)
+
+
+def cleanup():
+    THIS_FILE.unlink()
+
+
+def main():
+    files = recursive_get_files(REPO_DIR, EXCEPTED_FILES)
+    for filename in files:
+        substitute_placeholders(filename, placeholder_map=PLACEHOLDERS)
+    cleanup()
+
+
+if __name__ == "__main__":
+    main()
