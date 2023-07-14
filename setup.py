@@ -34,11 +34,14 @@ setup(
     description="project_description",
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
-    install_requires=[],
+    install_requires=[
+        "einops>=0.6.0,<1.0.0",
+        "torch>=1.7.0,<3.0.0",
+    ],
     extras_require=extras_require,
     classifiers=[
         "Programming Language :: Python :: 3",
         "Operating System :: OS Independent",
     ],
-    python_requires=">=3.7",
+    python_requires=">=3.8",
 )
