@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Generic, Literal, Optional, Type, TypeVar, Union, cast, overload
 
 import torch
@@ -22,55 +23,37 @@ class LoRA(nn.Module, Generic[ModuleType]):
         super().__init__()
         self.module = module.eval()
         self.lora_module = lora_module
-        self.enabled = enabled
+        self.enabled = enabled and lora_module is not None
 
-    def forward(self, x: Tensor) -> Tensor:
+        if not enabled:
+            self.disable_lora()
+        else:
+            self.enable_lora()
+
+    def forward(self, x: Tensor, *args, **kwargs) -> Tensor:
+        if self.enabled and args:
+            raise ValueError("LoRA modules do not support positional arguments.")
+
         enable_grad = (not self.enabled) and torch.is_grad_enabled()
         with torch.set_grad_enabled(enable_grad):
-            y = self.module(x)
+            y = self.module(x, *args, **kwargs)
         if self.enabled and self.lora_module is not None:
             y = y + self.lora_module(x)
+
         return y
 
     def enable_lora(self) -> None:
-        if self.lora_module is None:
-            raise ValueError("Cannot enable LoRA when self.lora_module is None")
-
-        for _, child in self.module.named_children():
-            if isinstance(child, LoRA) and child.lora_module is not None:
-                child.enable_lora()
-
-        self.enabled = True
+        return enable_lora(self)  # type: ignore
 
     def disable_lora(self) -> None:
-        for _, child in self.module.named_children():
-            if isinstance(child, LoRA):
-                child.disable_lora()
+        return disable_lora(self)  # type: ignore
 
-        self.enabled = False
+    def remove_lora(self, inplace: bool = False) -> ModuleType:
+        """Remove all LoRA modules from the model."""
+        return remove_lora(self, inplace=inplace)  # type: ignore
 
-    # TODO: Add option for 'inplace=False'
-    def remove_lora(self) -> ModuleType:
-        """Remove all LoRA modules from the model.
-
-        NOTE: This is an in-place operation!  This is not easily reversible, and
-        it will affect all references to the model, or its child layers.
-        """
-        for name, child in self.module.named_children():
-            if isinstance(child, LoRA):
-                self.module._modules[name] = child.remove_lora()
-
-        return self.module
-
-    def merge_lora(self, inplace: bool = False) -> ModuleType:
-        for name, child in self.module.named_children():
-            if isinstance(child, LoRA):
-                self.module._modules[name] = child.merge_lora(inplace=inplace)
-
-        if self.lora_module is None:
-            return self.module
-        else:
-            return self.lora_module.merge(self.module, inplace=inplace)
+    def merge_lora(self: LoRA[ModuleType], inplace: bool = False) -> ModuleType:
+        return merge_lora(self, inplace=inplace)  # type: ignore
 
     @classmethod
     def _from_linear(cls, module: nn.Linear, rank: int) -> LoRA[nn.Linear]:
@@ -84,7 +67,6 @@ class LoRA(nn.Module, Generic[ModuleType]):
 
     @classmethod
     def _from_conv(cls, module: ConvType, rank: int) -> LoRA[ConvType]:
-        out_channels, in_channels, *_ = module.weight.shape
         device = module.weight.device
         dtype = module.weight.dtype
 
@@ -99,8 +81,8 @@ class LoRA(nn.Module, Generic[ModuleType]):
             raise ValueError(f"Unsupported conv module type: {type(module)}")
 
         lora_module = lora_module_cls(
-            in_channels=in_channels,
-            out_channels=out_channels,
+            in_channels=module.in_channels,
+            out_channels=module.out_channels,
             rank=rank,
             kernel_size=module.kernel_size,  # type: ignore
             stride=module.stride,  # type: ignore
@@ -117,19 +99,29 @@ class LoRA(nn.Module, Generic[ModuleType]):
     @overload
     @classmethod
     def from_module(
-        cls, module: ModuleType, rank: int, is_root: Literal[True] = True
+        cls,
+        module: ModuleType,
+        rank: int,
+        enabled: bool = True,
+        is_root: Literal[True] = True,
     ) -> LoRA[ModuleType]:
         ...
 
     @overload
     @classmethod
     def from_module(
-        cls, module: ModuleType, rank: int, is_root: Literal[False] = False
+        cls,
+        module: ModuleType,
+        rank: int,
+        enabled: bool = True,
+        is_root: Literal[False] = False,
     ) -> Union[LoRA[ModuleType], ModuleType]:
         ...
 
     @classmethod
-    def from_module(cls, module: ModuleType, rank: int, is_root: bool = True):
+    def from_module(
+        cls, module: ModuleType, rank: int, enabled: bool = True, is_root: bool = True
+    ):
         if isinstance(module, nn.Linear):
             return LoRA._from_linear(module, rank)  # type: ignore
         elif isinstance(module, (nn.Conv1d, nn.Conv2d, nn.Conv3d)):
@@ -137,25 +129,61 @@ class LoRA(nn.Module, Generic[ModuleType]):
 
         for name, child in module.named_children():
             child = cast(ModuleType, child)
-            setattr(module, name, cls.from_module(child, rank, is_root=False))
+            module._modules[name] = cls.from_module(
+                child, rank, enabled=enabled, is_root=False
+            )
 
-        is_lora = any(isinstance(child, LoRA) for child in module.children())
-        if is_lora or is_root:
-            return LoRA(module, None, enabled=False)
+        if is_root:
+            return LoRA(module, None, enabled=enabled)
         else:
             return module
 
 
-if __name__ == "__main__":
-    from torchvision.models import resnet18
+def enable_lora(module: Union[ModuleType, LoRA[ModuleType]]) -> None:
+    for child in module.children():
+        enable_lora(child)
 
-    model = resnet18().cuda()
-    model.eval()
+    if isinstance(module, LoRA):
+        module.enabled = True
 
-    lora = LoRA.from_module(model, rank=1)
-    x = torch.randn(1, 3, 224, 224).cuda()
-    y = lora(x)
-    print(lora)
 
-    breakpoint()
-    pass
+def disable_lora(module: Union[ModuleType, LoRA[ModuleType]]) -> None:
+    for child in module.children():
+        disable_lora(child)
+
+    if isinstance(module, LoRA):
+        module.enabled = False
+
+
+def merge_lora(
+    module: Union[ModuleType, LoRA[ModuleType]], inplace: bool = False
+) -> ModuleType:
+    if not inplace:
+        module = deepcopy(module)
+
+    for name, child in module.named_children():
+        module._modules[name] = merge_lora(child)
+
+    if isinstance(module, LoRA):
+        if module.lora_module is None:
+            return module.module
+        else:
+            return module.lora_module.merge(module.module, inplace=True)
+    else:
+        return module
+
+
+def remove_lora(
+    module: Union[ModuleType, LoRA[ModuleType]], inplace: bool = False
+) -> ModuleType:
+    """Remove all LoRA modules from the model."""
+    if not inplace:
+        module = deepcopy(module)
+
+    if isinstance(module, LoRA):
+        return remove_lora(module.module, inplace=True)
+
+    for name, child in module.named_children():
+        module._modules[name] = remove_lora(child, inplace=True)
+
+    return module
