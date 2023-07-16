@@ -3,9 +3,10 @@ from __future__ import annotations
 from typing import Optional
 
 import torch
+from einops import einsum
 from torch import Tensor, nn
 
-from lora_pytorch.nn.base import BaseLoRAModule
+from lora_pytorch.modules.base import BaseLoRAModule
 
 
 class LinearLoRAModule(BaseLoRAModule[nn.Linear]):
@@ -18,7 +19,10 @@ class LinearLoRAModule(BaseLoRAModule[nn.Linear]):
         dtype: Optional[torch.dtype] = None,
     ):
         super().__init__()
+        self.in_features = in_features
+        self.out_features = out_features
         self.rank = rank
+
         self.in_proj = nn.Parameter(
             torch.empty((in_features, rank), device=device, dtype=dtype),
             requires_grad=True,
@@ -28,14 +32,29 @@ class LinearLoRAModule(BaseLoRAModule[nn.Linear]):
             requires_grad=True,
         )
 
+    def __repr__(self) -> str:
+        return (
+            f"{self.__class__.__name__}(in_features={self.in_features}, "
+            f"out_features={self.out_features}, rank={self.rank})"
+        )
+
+    def reset_parameters(self) -> None:
+        nn.init.kaiming_uniform_(self.in_proj)
+        nn.init.kaiming_uniform_(self.out_proj)
+
     def forward(self, x: Tensor) -> Tensor:
         return x @ self.in_proj @ self.out_proj
 
     @torch.no_grad()
     def merge(self, module: nn.Linear, inplace: bool = False) -> nn.Linear:
-        weight = module.weight.data + self.in_proj.data @ self.out_proj.data
+        # einstein notation:
+        # - i: input features
+        # - o: output features
+        # - r: rank
+        lora_weight = einsum(self.in_proj, self.out_proj, "i r, r o -> o i")
+
         if inplace:
-            module.weight.data = weight
+            module.weight.data += lora_weight
             return module
 
         out = nn.Linear(
@@ -45,6 +64,6 @@ class LinearLoRAModule(BaseLoRAModule[nn.Linear]):
             device=module.weight.device,
             dtype=module.weight.dtype,
         )
-        out.weight.data = weight
-        out.bias.data = module.bias.data
+        out.weight.data = module.weight.data + lora_weight
+        out.bias = module.bias
         return out
