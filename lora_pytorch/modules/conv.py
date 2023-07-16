@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from math import sqrt
 from typing import Optional, Tuple, TypeVar, Union
 
 import torch
@@ -14,16 +15,15 @@ ConvType = TypeVar("ConvType", nn.Conv1d, nn.Conv2d, nn.Conv3d)
 
 
 class _ConvLoRA(BaseLoRAModule[ConvType]):
-    def __init__(self, in_conv: ConvType, out_conv: ConvType):
+    def __init__(self, in_conv: ConvType, out_conv: ConvType, dropout: float = 0.0):
         super().__init__()
         self.in_conv: ConvType = in_conv
         self.out_conv: ConvType = out_conv
-
-        nn.init.zeros_(self.in_conv.weight)
-        nn.init.zeros_(self.out_conv.weight)
+        self.dropout = nn.Dropout(dropout)
 
     def forward(self, x: Tensor) -> Tensor:
         x = self.in_conv(x)
+        x = self.dropout(x)
         return self.out_conv(x)
 
     @torch.no_grad()
@@ -66,6 +66,8 @@ class Conv1dLoRA(_ConvLoRA[nn.Conv1d]):
         # TODO: Add groups parameter
         # groups: int = 1,
         bias: bool = False,
+        alpha: float = 1.0,
+        dropout: float = 0.0,
         device: Optional[torch.device] = None,
         dtype: Optional[torch.dtype] = None,
     ):
@@ -95,7 +97,18 @@ class Conv1dLoRA(_ConvLoRA[nn.Conv1d]):
         out_conv = nn.Conv1d(
             rank, out_channels, kernel_size=1, bias=bias, device=device, dtype=dtype
         )
-        super().__init__(in_conv=in_conv, out_conv=out_conv)
+        super().__init__(in_conv=in_conv, out_conv=out_conv, dropout=dropout)
+
+        # NOTE: The original LoRA paper recommends multiplying the output of 'in_proj'
+        # by (alpha / rank).  This adds more computation to the forward pass, and it's
+        # mathematically equivalent to scaling 'in_proj' by (alpha / rank) ahead of
+        # time.  I have chosen the second option for simplicity.
+        #
+        # Normally, the weights of 'in_proj' are initialized with 'kaiming_uniform_',
+        # and 'a=sqrt(5)'.  Since we're scaling the weights by (alpha / rank), we
+        # should scale 'a' by the same amount.
+        nn.init.kaiming_uniform_(self.in_conv.weight, a=(sqrt(5) * alpha / rank))
+        nn.init.zeros_(self.out_conv.weight)
 
     def __repr__(self):
         return (
@@ -118,6 +131,8 @@ class Conv2dLoRA(_ConvLoRA[nn.Conv2d]):
         # TODO: Add groups parameter
         # groups: int = 1,
         bias: bool = False,
+        alpha: float = 1.0,
+        dropout: float = 0.0,
         device: Optional[torch.device] = None,
         dtype: Optional[torch.dtype] = None,
     ):
@@ -138,7 +153,18 @@ class Conv2dLoRA(_ConvLoRA[nn.Conv2d]):
         out_conv = nn.Conv2d(
             rank, out_channels, kernel_size=1, bias=bias, device=device, dtype=dtype
         )
-        super().__init__(in_conv=in_conv, out_conv=out_conv)
+        super().__init__(in_conv=in_conv, out_conv=out_conv, dropout=dropout)
+
+        # NOTE: The original LoRA paper recommends multiplying the output of 'in_proj'
+        # by (alpha / rank).  This adds more computation to the forward pass, and it's
+        # mathematically equivalent to scaling 'in_proj' by (alpha / rank) ahead of
+        # time.  I have chosen the second option for simplicity.
+        #
+        # Normally, the weights of 'in_proj' are initialized with 'kaiming_uniform_',
+        # and 'a=sqrt(5)'.  Since we're scaling the weights by (alpha / rank), we
+        # should scale 'a' by the same amount.
+        nn.init.kaiming_uniform_(self.in_conv.weight, a=(sqrt(5) * alpha / rank))
+        nn.init.zeros_(self.out_conv.weight)
 
 
 class Conv3dLoRA(_ConvLoRA[nn.Conv3d]):
@@ -154,6 +180,9 @@ class Conv3dLoRA(_ConvLoRA[nn.Conv3d]):
         # TODO: Add groups parameter
         # groups: int = 1,
         bias: bool = False,
+        # TODO
+        alpha: float = 1.0,
+        dropout: float = 0.0,
         device: Optional[torch.device] = None,
         dtype: Optional[torch.dtype] = None,
     ):
@@ -174,4 +203,15 @@ class Conv3dLoRA(_ConvLoRA[nn.Conv3d]):
         out_conv = nn.Conv3d(
             rank, out_channels, kernel_size=1, bias=bias, device=device, dtype=dtype
         )
-        super().__init__(in_conv=in_conv, out_conv=out_conv)
+        super().__init__(in_conv=in_conv, out_conv=out_conv, dropout=dropout)
+
+        # NOTE: The original LoRA paper recommends multiplying the output of 'in_proj'
+        # by (alpha / rank).  This adds more computation to the forward pass, and it's
+        # mathematically equivalent to scaling 'in_proj' by (alpha / rank) ahead of
+        # time.  I have chosen the second option for simplicity.
+        #
+        # Normally, the weights of 'in_proj' are initialized with 'kaiming_uniform_',
+        # and 'a=sqrt(5)'.  Since we're scaling the weights by (alpha / rank), we
+        # should scale 'a' by the same amount.
+        nn.init.kaiming_uniform_(self.in_conv.weight, a=(sqrt(5) * alpha / rank))
+        nn.init.zeros_(self.out_conv.weight)

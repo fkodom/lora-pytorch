@@ -15,6 +15,8 @@ class LinearLoRAModule(BaseLoRAModule[nn.Linear]):
         in_features: int,
         out_features: int,
         rank: int,
+        alpha: float = 1.0,
+        dropout: float = 0.0,
         device: Optional[torch.device] = None,
         dtype: Optional[torch.dtype] = None,
     ):
@@ -31,6 +33,14 @@ class LinearLoRAModule(BaseLoRAModule[nn.Linear]):
             torch.empty((rank, out_features), device=device, dtype=dtype),
             requires_grad=True,
         )
+        self.dropout = nn.Dropout(dropout)
+
+        # NOTE: The original LoRA paper recommends multiplying the output of 'in_proj'
+        # by (alpha / rank).  This adds more computation to the forward pass, and it's
+        # mathematically equivalent to scaling 'in_proj' by (alpha / rank) ahead of
+        # time.  I have chosen the second option for simplicity.
+        nn.init.kaiming_uniform_(self.in_proj, alpha / rank)
+        nn.init.zeros_(self.out_proj)
 
     def __repr__(self) -> str:
         return (
@@ -38,12 +48,10 @@ class LinearLoRAModule(BaseLoRAModule[nn.Linear]):
             f"out_features={self.out_features}, rank={self.rank})"
         )
 
-    def reset_parameters(self) -> None:
-        nn.init.kaiming_uniform_(self.in_proj)
-        nn.init.kaiming_uniform_(self.out_proj)
-
     def forward(self, x: Tensor) -> Tensor:
-        return x @ self.in_proj @ self.out_proj
+        x = x @ self.in_proj
+        x = self.dropout(x)
+        return x @ self.out_proj
 
     @torch.no_grad()
     def merge(self, module: nn.Linear, inplace: bool = False) -> nn.Linear:

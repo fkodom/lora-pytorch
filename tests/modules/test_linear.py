@@ -39,13 +39,13 @@ def linear_and_lora_module(
         out_features=out_features,
         bias=bias,
         device=DEVICE,
-    )
+    ).eval()
     lora_module = LinearLoRAModule(
         in_features=in_features,
         out_features=out_features,
         rank=rank,
         device=DEVICE,
-    )
+    ).eval()
     yield linear, lora_module
 
 

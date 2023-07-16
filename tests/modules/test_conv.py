@@ -7,8 +7,6 @@ from torch import nn
 
 from lora_pytorch.modules.conv import Conv1dLoRA, Conv2dLoRA, Conv3dLoRA
 
-IN_CHANNELS = 3
-OUT_CHANNELS = 2
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
@@ -51,7 +49,7 @@ def conv1d_and_lora_module(
         dilation=dilation,
         bias=bias,
         device=DEVICE,
-    )
+    ).eval()
     lora_module = Conv1dLoRA(
         in_channels=in_channels,
         out_channels=out_channels,
@@ -61,7 +59,7 @@ def conv1d_and_lora_module(
         padding=conv.padding,  # type: ignore
         dilation=conv.dilation,  # type: ignore
         device=DEVICE,
-    )
+    ).eval()
     yield conv, lora_module
 
 
@@ -105,7 +103,7 @@ def conv2d_and_lora_module(
         dilation=dilation,
         bias=bias,
         device=DEVICE,
-    )
+    ).eval()
     lora_module = Conv2dLoRA(
         in_channels=in_channels,
         out_channels=out_channels,
@@ -115,7 +113,7 @@ def conv2d_and_lora_module(
         padding=conv.padding,  # type: ignore
         dilation=conv.dilation,  # type: ignore
         device=DEVICE,
-    )
+    ).eval()
     yield conv, lora_module
 
 
@@ -158,7 +156,7 @@ def conv3d_and_lora_module(
         dilation=dilation,
         bias=bias,
         device=DEVICE,
-    )
+    ).eval()
     lora_module = Conv3dLoRA(
         in_channels=in_channels,
         out_channels=out_channels,
@@ -168,7 +166,7 @@ def conv3d_and_lora_module(
         padding=conv.padding,  # type: ignore
         dilation=conv.dilation,  # type: ignore
         device=DEVICE,
-    )
+    ).eval()
     yield conv, lora_module
 
 
