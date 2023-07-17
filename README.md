@@ -100,17 +100,19 @@ assert isinstance(original_model, ResNet)
 
 ## Supported Layers
 
-> ✅ - supported <br> ⏱ - in progress <br> ❌ - not supported
+I hope to add support for more layer types.  Specifically, all of the layers listed below will eventually be supported.  If you need support for a specific layer, please open an issue or a pull request.
 
 Layer | Supported
------ | ---
+--- | ---
 `nn.Linear` | ✅
 `nn.MultiheadAttention` | ✅
-`nn.TransformerEncoder` | ⏱
-`nn.TransformerDecoder` | ⏱
+`nn.TransformerEncoder` | ❌
+`nn.TransformerDecoder` | ❌
 `nn.Conv1d` | ✅
 `nn.Conv2d` | ✅
 `nn.Conv3d` | ✅
-`nn.ConvTranspose1d` | ⏱
-`nn.ConvTranspose2d` | ⏱
-`nn.ConvTranspose3d` | ⏱
+`nn.ConvTranspose1d` | ❌
+`nn.ConvTranspose2d` | ❌
+`nn.ConvTranspose3d` | ❌
+
+**NOTE**: Activation, normalization, dropout, etc. layers are not affected by `LoRA`.  Those are not listed here, but you shouldn't have any problems using them.
