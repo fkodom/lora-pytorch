@@ -116,3 +116,11 @@ Layer | Supported
 `nn.ConvTranspose3d` | ❌
 
 **NOTE**: Activation, normalization, dropout, etc. layers are not affected by `LoRA`.  Those are not listed here, but you shouldn't have any problems using them.
+
+
+## TODO
+
+* Add support for more layer types (see above)
+* Experiments with large, pretrained models
+    * Specifically, models that are not covered by LoRA in [huggingface/transformers](https://github.com/huggingface/transformers), for example.
+    * Lots of CV examples: ResNet, ViT, DETR, UNET, DeepLab, etc.
