@@ -49,7 +49,7 @@ class LoRA(nn.Module, Generic[ModuleType]):
             self.enable_lora()
 
     def forward(self, x: Tensor, *args, **kwargs) -> Tensor:
-        enable_grad = (not self.enabled) and torch.is_grad_enabled()
+        enable_grad = (self.lora_module is None) and torch.is_grad_enabled()
         with torch.set_grad_enabled(enable_grad):
             y = self.module(x, *args, **kwargs)
         if self.enabled and self.lora_module is not None:
