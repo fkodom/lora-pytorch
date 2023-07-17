@@ -1,13 +1,31 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import Generic, Literal, Optional, Type, TypeVar, Union, cast, overload
+from typing import (
+    Any,
+    Generic,
+    Literal,
+    NamedTuple,
+    Optional,
+    Tuple,
+    Type,
+    TypeVar,
+    Union,
+    cast,
+    overload,
+)
 
 import torch
 from torch import Tensor, nn
 
+from lora_pytorch.modules.attention import MultiheadAttentionLoRAModule
 from lora_pytorch.modules.base import BaseLoRAModule
-from lora_pytorch.modules.conv import Conv1dLoRA, Conv2dLoRA, Conv3dLoRA, ConvType
+from lora_pytorch.modules.conv import (
+    Conv1dLoRAModule,
+    Conv2dLoRAModule,
+    Conv3dLoRAModule,
+    ConvType,
+)
 from lora_pytorch.modules.linear import LinearLoRAModule
 
 ModuleType = TypeVar("ModuleType", bound=nn.Module)
@@ -31,9 +49,6 @@ class LoRA(nn.Module, Generic[ModuleType]):
             self.enable_lora()
 
     def forward(self, x: Tensor, *args, **kwargs) -> Tensor:
-        if self.enabled and args:
-            raise ValueError("LoRA modules do not support positional arguments.")
-
         enable_grad = (not self.enabled) and torch.is_grad_enabled()
         with torch.set_grad_enabled(enable_grad):
             y = self.module(x, *args, **kwargs)
@@ -41,6 +56,11 @@ class LoRA(nn.Module, Generic[ModuleType]):
             y = y + self.lora_module(x)
 
         return y
+
+    def parameters(self, recurse: bool = True) -> Any:
+        if self.lora_module is None:
+            return []
+        return self.lora_module.parameters(recurse=recurse)
 
     def enable_lora(self) -> None:
         return enable_lora(self)  # type: ignore
@@ -70,13 +90,15 @@ class LoRA(nn.Module, Generic[ModuleType]):
         device = module.weight.device
         dtype = module.weight.dtype
 
-        lora_module_cls: Union[Type[Conv1dLoRA], Type[Conv2dLoRA], Type[Conv3dLoRA]]
+        lora_module_cls: Union[
+            Type[Conv1dLoRAModule], Type[Conv2dLoRAModule], Type[Conv3dLoRAModule]
+        ]
         if isinstance(module, nn.Conv1d):
-            lora_module_cls = Conv1dLoRA
+            lora_module_cls = Conv1dLoRAModule
         elif isinstance(module, nn.Conv2d):
-            lora_module_cls = Conv2dLoRA
+            lora_module_cls = Conv2dLoRAModule
         elif isinstance(module, nn.Conv3d):
-            lora_module_cls = Conv3dLoRA
+            lora_module_cls = Conv3dLoRAModule
         else:
             raise ValueError(f"Unsupported conv module type: {type(module)}")
 
@@ -88,13 +110,30 @@ class LoRA(nn.Module, Generic[ModuleType]):
             stride=module.stride,  # type: ignore
             padding=module.padding,  # type: ignore
             dilation=module.dilation,  # type: ignore
-            # TODO: Add support for groups
-            # groups=module.groups,
+            groups=module.groups,
             device=device,
             dtype=dtype,
         )
 
         return LoRA(module, lora_module)
+
+    @classmethod
+    def _from_multihead_attention(
+        cls, module: nn.MultiheadAttention, rank: int
+    ) -> MultiheadAttentionLoRA:
+        device = module.out_proj.weight.device
+        dtype = module.out_proj.weight.dtype
+        lora_module = MultiheadAttentionLoRAModule(
+            embed_dim=module.embed_dim,
+            num_heads=module.num_heads,
+            rank=rank,
+            bias=False,  # TODO: support bias
+            kdim=module.kdim,
+            vdim=module.vdim,
+            device=device,
+            dtype=dtype,
+        )
+        return MultiheadAttentionLoRA(module, lora_module)
 
     @overload
     @classmethod
@@ -126,6 +165,8 @@ class LoRA(nn.Module, Generic[ModuleType]):
             return LoRA._from_linear(module, rank)  # type: ignore
         elif isinstance(module, (nn.Conv1d, nn.Conv2d, nn.Conv3d)):
             return LoRA._from_conv(module, rank)  # type: ignore
+        elif isinstance(module, nn.MultiheadAttention):
+            return LoRA._from_multihead_attention(module, rank)  # type: ignore
 
         for name, child in module.named_children():
             child = cast(ModuleType, child)
@@ -139,10 +180,183 @@ class LoRA(nn.Module, Generic[ModuleType]):
             return module
 
 
+class MultiheadAttentionLoRA(LoRA[nn.MultiheadAttention]):
+    """
+    NOTE: MultiheadAttention doesn't quite fit the "sidecar" pattern, like essentially
+    every other module does.  Unlike other modules, which typically have a single
+    'weight' parameter that is modified by LoRA, MultiheadAttention has multiple
+    parameters that are modified by LoRA, and those parameters interact in non-trivial
+    ways (via attention) within the module itself.
+
+    For that reason, we emulate all of the necessary properties of MultiheadAttention,
+    and reuse the 'forward' method from MultiheadAttention.  This is a bit of a hack,
+    but it allows us to dynamically compute the LoRA-adjusted parameters without
+    rewriting *all* of the logic from 'MultiheadAttention.forward'.
+    """
+
+    def __init__(
+        self,
+        module: nn.MultiheadAttention,
+        lora_module: Optional[MultiheadAttentionLoRAModule],
+        enabled: bool = True,
+    ):
+        super().__init__(module, lora_module, enabled=enabled)
+        self.module = cast(nn.MultiheadAttention, self.module)
+        self.lora_module = cast(
+            Optional[MultiheadAttentionLoRAModule], self.lora_module
+        )
+
+    def forward(  # type: ignore
+        self,
+        query: Tensor,
+        key: Tensor,
+        value: Tensor,
+        key_padding_mask: Optional[Tensor] = None,
+        need_weights: bool = True,
+        attn_mask: Optional[Tensor] = None,
+        average_attn_weights: bool = True,
+        is_causal: bool = False,
+    ) -> Tuple[Tensor, Optional[Tensor]]:
+        if (not self.enabled) or self.lora_module is None:
+            return self.module.forward(
+                query,
+                key,
+                value,
+                key_padding_mask=key_padding_mask,
+                need_weights=need_weights,
+                attn_mask=attn_mask,
+                average_attn_weights=average_attn_weights,
+                is_causal=is_causal,
+            )
+        return nn.MultiheadAttention.forward(
+            cast(nn.MultiheadAttention, self),
+            query,
+            key,
+            value,
+            key_padding_mask=key_padding_mask,
+            need_weights=need_weights,
+            attn_mask=attn_mask,
+            average_attn_weights=average_attn_weights,
+            is_causal=is_causal,
+        )
+
+    def merge_masks(
+        self,
+        attn_mask: Optional[Tensor],
+        key_padding_mask: Optional[Tensor],
+        query: Tensor,
+    ) -> Tuple[Optional[Tensor], Optional[int]]:
+        return nn.MultiheadAttention.merge_masks(
+            cast(nn.MultiheadAttention, self),
+            attn_mask,
+            key_padding_mask,
+            query,
+        )
+
+    @property
+    def embed_dim(self) -> int:
+        return self.module.embed_dim
+
+    @property
+    def num_heads(self) -> int:
+        return self.module.num_heads
+
+    @property
+    def dropout(self) -> float:
+        return self.module.dropout
+
+    @property
+    def add_zero_attn(self) -> bool:
+        return self.module.add_zero_attn
+
+    @property
+    def batch_first(self) -> bool:
+        return self.module.batch_first
+
+    @property
+    def _qkv_same_embed_dim(self) -> bool:
+        return self.module._qkv_same_embed_dim
+
+    @property
+    def bias_k(self) -> Optional[Tensor]:
+        if self.module.bias_k is None:
+            return None
+        return self.module.bias_k.data.detach()
+
+    @property
+    def bias_v(self) -> Optional[Tensor]:
+        if self.module.bias_v is None:
+            return None
+        return self.module.bias_v.data.detach()
+
+    @property
+    def in_proj_weight(self) -> Tensor:
+        in_proj_weight = self.module.in_proj_weight
+        if in_proj_weight is None:
+            return None
+
+        weight = in_proj_weight.data.detach()
+        if (self.lora_module is None) or (self.lora_module.in_proj_weight is None):
+            return weight
+        else:
+            return weight + self.lora_module.in_proj_weight
+
+    @property
+    def in_proj_bias(self) -> Tensor:
+        bias = self.module.in_proj_bias
+        if bias is None:
+            return None
+        else:
+            return bias.data.detach()
+        # TODO: Add support for 'in_proj_bias' in MultiheadAttentionLoRAModule
+
+    @property
+    def q_proj_weight(self) -> Optional[Tensor]:
+        weight = self.module.q_proj_weight.data.detach()
+        if (weight is None) or (self.lora_module is None):
+            return weight
+        else:
+            return weight + self.lora_module.q_proj_weight
+
+    @property
+    def k_proj_weight(self) -> Optional[Tensor]:
+        weight = self.module.k_proj_weight.data.detach()
+        if (weight is None) or (self.lora_module is None):
+            return weight
+        else:
+            return weight + self.lora_module.k_proj_weight
+
+    @property
+    def v_proj_weight(self) -> Optional[Tensor]:
+        weight = self.module.v_proj_weight.data.detach()
+        if (weight is None) or (self.lora_module is None):
+            return weight
+        else:
+            return weight + self.lora_module.v_proj_weight
+
+    @property
+    def out_proj(self) -> OutProj:
+        weight = self.module.out_proj.weight.data.detach()
+        bias = self.module.out_proj.bias
+        if self.lora_module is not None:
+            lora_out_proj = cast(OutProj, self.lora_module.out_proj)
+            weight = weight + lora_out_proj.weight
+            if (bias is not None) and (lora_out_proj.bias is not None):
+                # Mypy complains about a type mismatch here (Tensor vs. Parameter)
+                # but Parameter is just a subclass of Tensor, so this is fine.
+                bias = bias + lora_out_proj.bias  # type: ignore
+
+        return OutProj(weight, bias)
+
+
+class OutProj(NamedTuple):
+    weight: Tensor
+    bias: Optional[Tensor]
+
+
 def enable_lora(module: Union[ModuleType, LoRA[ModuleType]]) -> None:
     for child in module.children():
         enable_lora(child)
-
     if isinstance(module, LoRA):
         module.enabled = True
 
@@ -150,7 +364,6 @@ def enable_lora(module: Union[ModuleType, LoRA[ModuleType]]) -> None:
 def disable_lora(module: Union[ModuleType, LoRA[ModuleType]]) -> None:
     for child in module.children():
         disable_lora(child)
-
     if isinstance(module, LoRA):
         module.enabled = False
 
@@ -158,32 +371,29 @@ def disable_lora(module: Union[ModuleType, LoRA[ModuleType]]) -> None:
 def merge_lora(
     module: Union[ModuleType, LoRA[ModuleType]], inplace: bool = False
 ) -> ModuleType:
-    if not inplace:
-        module = deepcopy(module)
+    out = module if inplace else deepcopy(module)
+    for name, child in out.named_children():
+        out._modules[name] = merge_lora(child, inplace=inplace)
 
-    for name, child in module.named_children():
-        module._modules[name] = merge_lora(child)
-
-    if isinstance(module, LoRA):
-        if module.lora_module is None:
-            return module.module
+    if isinstance(out, LoRA):
+        if out.lora_module is None:
+            return out.module
         else:
-            return module.lora_module.merge(module.module, inplace=True)
+            return out.lora_module.merge(out.module, inplace=inplace)
     else:
-        return module
+        return out
 
 
 def remove_lora(
     module: Union[ModuleType, LoRA[ModuleType]], inplace: bool = False
 ) -> ModuleType:
     """Remove all LoRA modules from the model."""
-    if not inplace:
-        module = deepcopy(module)
+    out = module if inplace else deepcopy(module)
 
-    if isinstance(module, LoRA):
-        return remove_lora(module.module, inplace=True)
+    for name, child in out.named_children():
+        out._modules[name] = remove_lora(child, inplace=inplace)
 
-    for name, child in module.named_children():
-        module._modules[name] = remove_lora(child, inplace=True)
-
-    return module
+    if isinstance(out, LoRA):
+        return out.module
+    else:
+        return out

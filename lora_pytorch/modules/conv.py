@@ -15,7 +15,12 @@ ConvType = TypeVar("ConvType", nn.Conv1d, nn.Conv2d, nn.Conv3d)
 
 
 class _ConvLoRA(BaseLoRAModule[ConvType]):
-    def __init__(self, in_conv: ConvType, out_conv: ConvType, dropout: float = 0.0):
+    def __init__(
+        self,
+        in_conv: ConvType,
+        out_conv: ConvType,
+        dropout: float = 0.0,
+    ):
         super().__init__()
         self.in_conv: ConvType = in_conv
         self.out_conv: ConvType = out_conv
@@ -37,6 +42,7 @@ class _ConvLoRA(BaseLoRAModule[ConvType]):
             self.in_conv.weight.data,
             "o r ..., r i ... -> o i ...",
         )
+        # TODO: Detailed error message
         assert module.weight.data.shape == weight.shape
 
         if inplace:
@@ -53,7 +59,7 @@ class _ConvLoRA(BaseLoRAModule[ConvType]):
         return out_module
 
 
-class Conv1dLoRA(_ConvLoRA[nn.Conv1d]):
+class Conv1dLoRAModule(_ConvLoRA[nn.Conv1d]):
     def __init__(
         self,
         in_channels: int,
@@ -63,8 +69,7 @@ class Conv1dLoRA(_ConvLoRA[nn.Conv1d]):
         stride: Union[int, Tuple[int]] = 1,
         padding: Union[int, Tuple[int]] = 0,
         dilation: Union[int, Tuple[int]] = 1,
-        # TODO: Add groups parameter
-        # groups: int = 1,
+        groups: int = 1,
         bias: bool = False,
         alpha: float = 1.0,
         dropout: float = 0.0,
@@ -90,6 +95,7 @@ class Conv1dLoRA(_ConvLoRA[nn.Conv1d]):
             stride=stride,
             padding=padding,
             dilation=dilation,
+            groups=groups,
             bias=False,
             device=device,
             dtype=dtype,
@@ -118,7 +124,7 @@ class Conv1dLoRA(_ConvLoRA[nn.Conv1d]):
         )
 
 
-class Conv2dLoRA(_ConvLoRA[nn.Conv2d]):
+class Conv2dLoRAModule(_ConvLoRA[nn.Conv2d]):
     def __init__(
         self,
         in_channels: int,
@@ -128,8 +134,7 @@ class Conv2dLoRA(_ConvLoRA[nn.Conv2d]):
         stride: Union[int, Tuple[int, int]] = 1,
         padding: Union[int, Tuple[int, int]] = 0,
         dilation: Union[int, Tuple[int, int]] = 1,
-        # TODO: Add groups parameter
-        # groups: int = 1,
+        groups: int = 1,
         bias: bool = False,
         alpha: float = 1.0,
         dropout: float = 0.0,
@@ -146,6 +151,7 @@ class Conv2dLoRA(_ConvLoRA[nn.Conv2d]):
             stride=stride,
             padding=padding,
             dilation=dilation,
+            groups=groups,
             bias=False,
             device=device,
             dtype=dtype,
@@ -167,7 +173,7 @@ class Conv2dLoRA(_ConvLoRA[nn.Conv2d]):
         nn.init.zeros_(self.out_conv.weight)
 
 
-class Conv3dLoRA(_ConvLoRA[nn.Conv3d]):
+class Conv3dLoRAModule(_ConvLoRA[nn.Conv3d]):
     def __init__(
         self,
         in_channels: int,
@@ -177,10 +183,8 @@ class Conv3dLoRA(_ConvLoRA[nn.Conv3d]):
         stride: Union[int, Tuple[int, int, int]] = 1,
         padding: Union[int, Tuple[int, int, int]] = 0,
         dilation: Union[int, Tuple[int, int, int]] = 1,
-        # TODO: Add groups parameter
-        # groups: int = 1,
+        groups: int = 1,
         bias: bool = False,
-        # TODO
         alpha: float = 1.0,
         dropout: float = 0.0,
         device: Optional[torch.device] = None,
@@ -196,6 +200,7 @@ class Conv3dLoRA(_ConvLoRA[nn.Conv3d]):
             stride=stride,
             padding=padding,
             dilation=dilation,
+            groups=groups,
             bias=False,
             device=device,
             dtype=dtype,

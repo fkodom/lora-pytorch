@@ -15,6 +15,8 @@ class LinearLoRAModule(BaseLoRAModule[nn.Linear]):
         in_features: int,
         out_features: int,
         rank: int,
+        # TODO: Add support for bias
+        # bias: bool = False,
         alpha: float = 1.0,
         dropout: float = 0.0,
         device: Optional[torch.device] = None,

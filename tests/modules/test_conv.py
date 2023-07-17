@@ -5,7 +5,11 @@ import pytest
 import torch
 from torch import nn
 
-from lora_pytorch.modules.conv import Conv1dLoRA, Conv2dLoRA, Conv3dLoRA
+from lora_pytorch.modules.conv import (
+    Conv1dLoRAModule,
+    Conv2dLoRAModule,
+    Conv3dLoRAModule,
+)
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -38,7 +42,7 @@ def rank(request) -> Generator[int, None, None]:
 )
 def conv1d_and_lora_module(
     request, in_channels: int, out_channels: int, rank: int
-) -> Generator[Tuple[nn.Conv1d, Conv1dLoRA], None, None]:
+) -> Generator[Tuple[nn.Conv1d, Conv1dLoRAModule], None, None]:
     kernel_size, stride, padding, dilation, bias = request.param
     conv = nn.Conv1d(
         in_channels,
@@ -50,7 +54,7 @@ def conv1d_and_lora_module(
         bias=bias,
         device=DEVICE,
     ).eval()
-    lora_module = Conv1dLoRA(
+    lora_module = Conv1dLoRAModule(
         in_channels=in_channels,
         out_channels=out_channels,
         rank=rank,
@@ -64,7 +68,7 @@ def conv1d_and_lora_module(
 
 
 @torch.no_grad()
-def test_conv1d_merge(conv1d_and_lora_module: Tuple[nn.Conv1d, Conv1dLoRA]):
+def test_conv1d_merge(conv1d_and_lora_module: Tuple[nn.Conv1d, Conv1dLoRAModule]):
     conv, lora_module = conv1d_and_lora_module
     x = torch.randn(1, conv.in_channels, 5, device=DEVICE)
     y1 = conv(x) + lora_module(x)
@@ -92,7 +96,7 @@ def test_conv1d_merge(conv1d_and_lora_module: Tuple[nn.Conv1d, Conv1dLoRA]):
 )
 def conv2d_and_lora_module(
     request, in_channels: int, out_channels: int, rank: int
-) -> Generator[Tuple[nn.Conv2d, Conv2dLoRA], None, None]:
+) -> Generator[Tuple[nn.Conv2d, Conv2dLoRAModule], None, None]:
     kernel_size, stride, padding, dilation, bias = request.param
     conv = nn.Conv2d(
         in_channels,
@@ -104,7 +108,7 @@ def conv2d_and_lora_module(
         bias=bias,
         device=DEVICE,
     ).eval()
-    lora_module = Conv2dLoRA(
+    lora_module = Conv2dLoRAModule(
         in_channels=in_channels,
         out_channels=out_channels,
         rank=rank,
@@ -118,7 +122,7 @@ def conv2d_and_lora_module(
 
 
 @torch.no_grad()
-def test_conv2d_merge(conv2d_and_lora_module: Tuple[nn.Conv2d, Conv2dLoRA]):
+def test_conv2d_merge(conv2d_and_lora_module: Tuple[nn.Conv2d, Conv2dLoRAModule]):
     conv, lora_module = conv2d_and_lora_module
     x = torch.randn(1, conv.in_channels, 5, 5, device=DEVICE)
     y1 = conv(x) + lora_module(x)
@@ -145,7 +149,7 @@ def test_conv2d_merge(conv2d_and_lora_module: Tuple[nn.Conv2d, Conv2dLoRA]):
 )
 def conv3d_and_lora_module(
     request, in_channels: int, out_channels: int, rank: int
-) -> Generator[Tuple[nn.Conv3d, Conv3dLoRA], None, None]:
+) -> Generator[Tuple[nn.Conv3d, Conv3dLoRAModule], None, None]:
     kernel_size, stride, padding, dilation, bias = request.param
     conv = nn.Conv3d(
         in_channels,
@@ -157,7 +161,7 @@ def conv3d_and_lora_module(
         bias=bias,
         device=DEVICE,
     ).eval()
-    lora_module = Conv3dLoRA(
+    lora_module = Conv3dLoRAModule(
         in_channels=in_channels,
         out_channels=out_channels,
         rank=rank,
@@ -171,7 +175,7 @@ def conv3d_and_lora_module(
 
 
 @torch.no_grad()
-def test_conv3d_merge(conv3d_and_lora_module: Tuple[nn.Conv3d, Conv3dLoRA]):
+def test_conv3d_merge(conv3d_and_lora_module: Tuple[nn.Conv3d, Conv3dLoRAModule]):
     conv, lora_module = conv3d_and_lora_module
     x = torch.randn(1, conv.in_channels, 5, 5, 5, device=DEVICE)
     y1 = conv(x) + lora_module(x)
