@@ -20,10 +20,10 @@ def get_version_tag() -> str:
 
 extras_require = {
     "test": [
-        "black",
+        "black==23.12.0",
         "flake8",
         "isort",
-        "mypy",
+        "mypy==1.8.0",
         "pytest",
         "pytest-cov",
         "torchtext",
