@@ -106,8 +106,6 @@ Layer | Supported
 --- | ---
 `nn.Linear` | ✅
 `nn.MultiheadAttention` | ✅
-`nn.TransformerEncoder` | ❌
-`nn.TransformerDecoder` | ❌
 `nn.Conv1d` | ✅
 `nn.Conv2d` | ✅
 `nn.Conv3d` | ✅
