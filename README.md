@@ -23,7 +23,8 @@ For contributors:
 # Clone repository
 gh repo clone fkodom/lora-pytorch
 # Install all dev dependencies (tests etc.)
-pip install "lora-pytorch[all] @ git+ssh://git@github.com/fkodom/lora-pytorch.git"
+cd lora-pytorch
+pip install -e ".[all]"
 # Setup pre-commit hooks
 pre-commit install
 ```
@@ -115,14 +116,11 @@ Layer | Supported
 `nn.ConvTranspose2d` | ❌
 `nn.ConvTranspose3d` | ❌
 
-**TODO**: Add support for `ConvTranspose` layers.
-
 **NOTE**: Activation, normalization, dropout, etc. layers are not affected by `LoRA`.  Those are not listed here, but you shouldn't have any problems using them.
-
 
 ## TODO
 
-* Add support for more layer types (see above)
+* Add support for `ConvTranspose` layers.
 * Experiments with large, pretrained models
-    * Specifically, models that are not covered by LoRA in [huggingface/transformers](https://github.com/huggingface/transformers), for example.
+    * Specifically, models that are not covered by LoRA in [huggingface/transformers](https://github.com/huggingface/transformers).
     * Lots of CV examples: ResNet, ViT, DETR, UNET, DeepLab, etc.
