@@ -115,6 +115,8 @@ class Conv1dLoRAModule(_ConvLoRA[nn.Conv1d]):
         # should scale 'a' by the same amount.
         nn.init.kaiming_uniform_(self.in_conv.weight, a=(sqrt(5) * alpha / rank))
         nn.init.zeros_(self.out_conv.weight)
+        if self.out_conv.bias is not None:
+            nn.init.zeros_(self.out_conv.bias)
 
     def __repr__(self):
         return (
@@ -171,6 +173,8 @@ class Conv2dLoRAModule(_ConvLoRA[nn.Conv2d]):
         # should scale 'a' by the same amount.
         nn.init.kaiming_uniform_(self.in_conv.weight, a=(sqrt(5) * alpha / rank))
         nn.init.zeros_(self.out_conv.weight)
+        if self.out_conv.bias is not None:
+            nn.init.zeros_(self.out_conv.bias)
 
 
 class Conv3dLoRAModule(_ConvLoRA[nn.Conv3d]):
@@ -220,3 +224,5 @@ class Conv3dLoRAModule(_ConvLoRA[nn.Conv3d]):
         # should scale 'a' by the same amount.
         nn.init.kaiming_uniform_(self.in_conv.weight, a=(sqrt(5) * alpha / rank))
         nn.init.zeros_(self.out_conv.weight)
+        if self.out_conv.bias is not None:
+            nn.init.zeros_(self.out_conv.bias)

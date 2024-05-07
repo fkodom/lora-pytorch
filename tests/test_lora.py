@@ -4,12 +4,14 @@ from typing import Generator
 
 import pytest
 import torch
+from pytest import FixtureRequest
 from torch import nn
 from torchvision.models import ResNet18_Weights, ViT_B_32_Weights, resnet18, vit_b_32
 
 from lora_pytorch.lora import LoRA
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+DTYPE = torch.float64  # for better precision/stability when testing LoRA
 # Force CUDA ops to be deterministic
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
@@ -51,13 +53,14 @@ def test_multihead_attention(
         vdim=kvdim,
         batch_first=batch_first,
         device=DEVICE,
+        dtype=DTYPE,
     ).eval()
     if batch_first:
-        q = torch.randn(1, 16, embed_dim, device=DEVICE)
-        kv = torch.randn(1, 16, kvdim, device=DEVICE)
+        q = torch.randn(1, 16, embed_dim, device=DEVICE, dtype=DTYPE)
+        kv = torch.randn(1, 16, kvdim, device=DEVICE, dtype=DTYPE)
     else:
-        q = torch.randn(16, 1, embed_dim, device=DEVICE)
-        kv = torch.randn(16, 1, kvdim, device=DEVICE)
+        q = torch.randn(16, 1, embed_dim, device=DEVICE, dtype=DTYPE)
+        kv = torch.randn(16, 1, kvdim, device=DEVICE, dtype=DTYPE)
 
     y1, _ = model(q, kv, kv)
 
@@ -105,13 +108,13 @@ def test_multihead_attention(
         # partial(mobilenet_v3_small, weights=MobileNet_V3_Small_Weights.DEFAULT),
     ],
 )
-def vision_model(request) -> Generator[nn.Module, None, None]:
-    yield request.param().eval().to(DEVICE)
+def vision_model(request: FixtureRequest) -> Generator[nn.Module, None, None]:
+    yield request.param().eval().to(device=DEVICE, dtype=DTYPE)
 
 
 @torch.no_grad()
 def test_vision_model(vision_model: nn.Module, rank: int):
-    x = torch.randn(1, 3, 224, 224, device=DEVICE)
+    x = torch.randn(1, 3, 224, 224, device=DEVICE, dtype=DTYPE)
     y1 = vision_model(x)
 
     lora = LoRA.from_module(vision_model, rank=rank)
@@ -131,12 +134,12 @@ def test_vision_model(vision_model: nn.Module, rank: int):
 
     lora.enable_lora()
     y5 = lora(x)
-    assert torch.allclose(y3, y5, atol=1e-4)
+    torch.testing.assert_allclose(y3, y5, rtol=1e-4, atol=1e-4)
 
     merged = lora.merge_lora(inplace=False)
     assert not isinstance(merged, LoRA)
     y6 = merged(x)
-    assert torch.allclose(y5, y6, atol=1e-4)
+    torch.testing.assert_allclose(y5, y6, rtol=1e-4, atol=1e-4)
 
     lora_copy = deepcopy(lora)
     merged2 = lora_copy.merge_lora(inplace=True)
@@ -183,7 +186,7 @@ def test_vision_model(vision_model: nn.Module, rank: int):
 #     lora = LoRA.from_module(model, rank=rank)
 #     lora.eval()
 #     y2 = lora(x)
-#     # By default, LoRA is initialized so that output is the same as the original model.
+#     # By default, LoRA is initialized so that output is the same as the original model
 #     assert torch.allclose(y1, y2)
 #     # In order to test enable/disable/remove/merge functions, we need to randomly
 #     # initialize the LoRA weights, so that the outputs are different.
