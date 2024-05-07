@@ -1,11 +1,13 @@
 from copy import deepcopy
 from functools import partial
-from typing import Generator
+from typing import Callable, Generator, Tuple
 
 import pytest
 import torch
 from pytest import FixtureRequest
-from torch import nn
+from torch import Tensor, nn
+from torchtext.functional import to_tensor
+from torchtext.models import XLMR_BASE_ENCODER
 from torchvision.models import ResNet18_Weights, ViT_B_32_Weights, resnet18, vit_b_32
 
 from lora_pytorch.lora import LoRA
@@ -150,18 +152,6 @@ def test_vision_model(vision_model: nn.Module, rank: int):
     removed = lora.remove_lora()
     y8 = removed(x)
     assert torch.allclose(y1, y8, atol=1e-4)
-
-
-# TODO: After enabling "fast path" for TransformerEncoder and TransformerDecoder
-# in LoRA, we can test these models.
-
-from typing import Callable, Generator, Tuple
-
-import pytest
-import torch
-from torch import Tensor, nn
-from torchtext.functional import to_tensor
-from torchtext.models import XLMR_BASE_ENCODER
 
 
 @pytest.fixture(
