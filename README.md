@@ -1,7 +1,7 @@
 # lora-pytorch
 
-A simple, robust implementation of [LoRA (Low-Rank Adaptation)](https://arxiv.org/pdf/2106.09685.pdf) for PyTorch.
-* Compatible with NLP, CV, and other model types ✔️
+A simple but robust implementation of [LoRA (Low-Rank Adaptation)](https://arxiv.org/pdf/2106.09685.pdf) for PyTorch, which depends only on PyTorch itself!  No dependence on `transformers` or other packages.
+* Compatible with LLMs, CNNs, MLPs, and other model types ✔️
 * Strongly typed ✔️
 * Fully tested ✔️
 
@@ -31,7 +31,6 @@ pre-commit install
 
 ## Usage
 
-How to use LoRA with your PyTorch model:
 ```python
 import torch
 from lora_pytorch import LoRA
@@ -100,18 +99,23 @@ assert isinstance(original_model, ResNet)
 
 ## Supported Layers
 
-I hope to add support for more layer types.  Specifically, all of the layers listed below will eventually be supported.  If you need support for a specific layer, please open an issue or a pull request.
-
 Layer | Supported
 --- | ---
 `nn.Linear` | ✅
 `nn.MultiheadAttention` | ✅
+`nn.TransformerEncoder` | ✅
+`nn.TransformerEncoderLayer` | ✅
+`nn.TransformerDecoder` | ✅
+`nn.TransformerDecoderLayer` | ✅
+`nn.Transformer` | ✅
 `nn.Conv1d` | ✅
 `nn.Conv2d` | ✅
 `nn.Conv3d` | ✅
 `nn.ConvTranspose1d` | ❌
 `nn.ConvTranspose2d` | ❌
 `nn.ConvTranspose3d` | ❌
+
+**TODO**: Add support for `ConvTranspose` layers.
 
 **NOTE**: Activation, normalization, dropout, etc. layers are not affected by `LoRA`.  Those are not listed here, but you shouldn't have any problems using them.
 

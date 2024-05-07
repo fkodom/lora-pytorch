@@ -5,7 +5,6 @@ from math import sqrt
 from typing import Optional, Tuple, TypeVar, Union
 
 import torch
-from einops import einsum
 from torch import Tensor, nn
 
 from lora_pytorch.modules.base import BaseLoRAModule
@@ -37,10 +36,10 @@ class _ConvLoRA(BaseLoRAModule[ConvType]):
         # - i: in channels
         # - o: out channels
         # - r: rank
-        weight = einsum(
+        weight = torch.einsum(
+            "o r ..., r i ... -> o i ...",
             self.out_conv.weight.data,
             self.in_conv.weight.data,
-            "o r ..., r i ... -> o i ...",
         )
         # TODO: Detailed error message
         assert module.weight.data.shape == weight.shape

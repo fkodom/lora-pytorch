@@ -3,7 +3,6 @@ from __future__ import annotations
 from typing import Optional
 
 import torch
-from einops import einsum
 from torch import Tensor, nn
 
 from lora_pytorch.modules.base import BaseLoRAModule
@@ -61,7 +60,7 @@ class LinearLoRAModule(BaseLoRAModule[nn.Linear]):
         # - i: input features
         # - o: output features
         # - r: rank
-        lora_weight = einsum(self.in_proj, self.out_proj, "i r, r o -> o i")
+        lora_weight = torch.einsum("i r, r o -> o i", self.in_proj, self.out_proj)
 
         if inplace:
             module.weight.data += lora_weight
@@ -77,3 +76,7 @@ class LinearLoRAModule(BaseLoRAModule[nn.Linear]):
         out.weight.data = module.weight.data + lora_weight
         out.bias = module.bias
         return out
+
+    @property
+    def weight(self) -> Tensor:
+        return torch.einsum("i r, r o -> o i", self.in_proj, self.out_proj)

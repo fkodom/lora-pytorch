@@ -46,7 +46,6 @@ setup(
     long_description=open("README.md").read(),
     long_description_content_type="text/markdown",
     install_requires=[
-        "einops>=0.6.0,<1.0.0",
         "torch>=1.7.0,<3.0.0",
     ],
     extras_require=extras_require,

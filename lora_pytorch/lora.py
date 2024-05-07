@@ -179,6 +179,31 @@ class LoRA(nn.Module, Generic[ModuleType]):
         else:
             return module
 
+    @property
+    def weight(self) -> Tensor:
+        if not hasattr(self.module, "weight"):
+            raise AttributeError("Module has no attribute 'weight'")
+
+        if self.enabled and self.lora_module is not None:
+            assert hasattr(self.lora_module, "weight")
+            return self.module.weight + self.lora_module.weight
+        else:
+            return self.module.weight
+
+    @property
+    def bias(self) -> Optional[Tensor]:
+        if not hasattr(self.module, "bias"):
+            return None
+
+        if (
+            self.enabled
+            and self.lora_module is not None
+            and hasattr(self.lora_module, "bias")
+        ):
+            return self.module.bias + self.lora_module.bias
+        else:
+            return self.module.bias
+
 
 class MultiheadAttentionLoRA(LoRA[nn.MultiheadAttention]):
     """
@@ -189,9 +214,9 @@ class MultiheadAttentionLoRA(LoRA[nn.MultiheadAttention]):
     ways (via attention) within the module itself.
 
     For that reason, we emulate all of the necessary properties of MultiheadAttention,
-    and reuse the 'forward' method from MultiheadAttention.  This is a bit of a hack,
-    but it allows us to dynamically compute the LoRA-adjusted parameters without
-    rewriting *all* of the logic from 'MultiheadAttention.forward'.
+    and reuse the 'forward' method from MultiheadAttention.  This allows us to
+    dynamically compute the LoRA-adjusted parameters without rewriting *all* of the
+    logic from 'MultiheadAttention.forward'.
     """
 
     def __init__(
@@ -296,10 +321,14 @@ class MultiheadAttentionLoRA(LoRA[nn.MultiheadAttention]):
             return None
 
         weight = in_proj_weight.data.detach()
-        if (self.lora_module is None) or (self.lora_module.in_proj_weight is None):
-            return weight
-        else:
+        if (
+            self.enabled
+            and self.lora_module is not None
+            and self.lora_module.in_proj_weight is not None
+        ):
             return weight + self.lora_module.in_proj_weight
+        else:
+            return weight
 
     @property
     def in_proj_bias(self) -> Tensor:
@@ -313,32 +342,32 @@ class MultiheadAttentionLoRA(LoRA[nn.MultiheadAttention]):
     @property
     def q_proj_weight(self) -> Optional[Tensor]:
         weight = self.module.q_proj_weight.data.detach()
-        if (weight is None) or (self.lora_module is None):
-            return weight
-        else:
+        if self.enabled and weight is not None and self.lora_module is not None:
             return weight + self.lora_module.q_proj_weight
+        else:
+            return weight
 
     @property
     def k_proj_weight(self) -> Optional[Tensor]:
         weight = self.module.k_proj_weight.data.detach()
-        if (weight is None) or (self.lora_module is None):
-            return weight
-        else:
+        if self.enabled and (weight is not None) and (self.lora_module is not None):
             return weight + self.lora_module.k_proj_weight
+        else:
+            return weight
 
     @property
     def v_proj_weight(self) -> Optional[Tensor]:
         weight = self.module.v_proj_weight.data.detach()
-        if (weight is None) or (self.lora_module is None):
-            return weight
-        else:
+        if self.enabled and (weight is not None) and (self.lora_module is not None):
             return weight + self.lora_module.v_proj_weight
+        else:
+            return weight
 
     @property
     def out_proj(self) -> OutProj:
         weight = self.module.out_proj.weight.data.detach()
         bias = self.module.out_proj.bias
-        if self.lora_module is not None:
+        if self.enabled and self.lora_module is not None:
             lora_out_proj = cast(OutProj, self.lora_module.out_proj)
             weight = weight + lora_out_proj.weight
             if (bias is not None) and (lora_out_proj.bias is not None):

@@ -155,64 +155,65 @@ def test_vision_model(vision_model: nn.Module, rank: int):
 # TODO: After enabling "fast path" for TransformerEncoder and TransformerDecoder
 # in LoRA, we can test these models.
 
-# from typing import Callable, Generator, Tuple
+from typing import Callable, Generator, Tuple
 
-# import pytest
-# import torch
-# from torch import Tensor, nn
-# from torchtext.functional import to_tensor
-# from torchtext.models import XLMR_BASE_ENCODER
-
-# @pytest.fixture(
-#     params=[XLMR_BASE_ENCODER],
-# )
-# def text_model(
-#     request,
-# ) -> Generator[Tuple[nn.Module, Callable[[str], Tensor]], None, None]:
-#     bundle = request.param
-#     model = bundle.get_model().eval().to(DEVICE)
-#     transform = bundle.transform()
-#     yield model, transform
+import pytest
+import torch
+from torch import Tensor, nn
+from torchtext.functional import to_tensor
+from torchtext.models import XLMR_BASE_ENCODER
 
 
-# @torch.no_grad()
-# def test_text_model(text_model: Tuple[nn.Module, Callable[[str], Tensor]], rank: int):
-#     model, transform = text_model
-#     texts = ["Hello, world!"]
-#     x = to_tensor(transform(texts)).to(DEVICE)
+@pytest.fixture(
+    params=[XLMR_BASE_ENCODER],
+)
+def text_model(
+    request,
+) -> Generator[Tuple[nn.Module, Callable[[str], Tensor]], None, None]:
+    bundle = request.param
+    model = bundle.get_model().eval().to(DEVICE)
+    transform = bundle.transform()
+    yield model, transform
 
-#     y1 = model(x)
 
-#     lora = LoRA.from_module(model, rank=rank)
-#     lora.eval()
-#     y2 = lora(x)
-#     # By default, LoRA is initialized so that output is the same as the original model
-#     assert torch.allclose(y1, y2)
-#     # In order to test enable/disable/remove/merge functions, we need to randomly
-#     # initialize the LoRA weights, so that the outputs are different.
-#     _init_random_lora_module(lora)
-#     y3 = lora(x)
-#     assert not torch.allclose(y1, y3, atol=1e-5)
+@torch.no_grad()
+def test_text_model(text_model: Tuple[nn.Module, Callable[[str], Tensor]], rank: int):
+    model, transform = text_model
+    texts = ["Hello, world!"]
+    x = to_tensor(transform(texts)).to(DEVICE)
 
-#     lora.disable_lora()
-#     y4 = lora(x)
-#     assert torch.allclose(y1, y4, atol=1e-5)
+    y1 = model(x)
 
-#     lora.enable_lora()
-#     y5 = lora(x)
-#     assert torch.allclose(y3, y5, atol=1e-4)
+    lora = LoRA.from_module(model, rank=rank)
+    lora.eval()
+    y2 = lora(x)
+    # By default, LoRA is initialized so that output is the same as the original model
+    assert torch.allclose(y1, y2)
+    # In order to test enable/disable/remove/merge functions, we need to randomly
+    # initialize the LoRA weights, so that the outputs are different.
+    _init_random_lora_module(lora)
+    y3 = lora(x)
+    assert not torch.allclose(y1, y3, atol=1e-5)
 
-#     merged = lora.merge_lora(inplace=False)
-#     assert not isinstance(merged, LoRA)
-#     y6 = merged(x)
-#     assert torch.allclose(y5, y6, atol=1e-4)
+    lora.disable_lora()
+    y4 = lora(x)
+    assert torch.allclose(y1, y4, atol=1e-5)
 
-#     lora_copy = deepcopy(lora)
-#     merged2 = lora_copy.merge_lora(inplace=True)
-#     assert not isinstance(merged2, LoRA)
-#     y7 = merged2(x)
-#     assert torch.allclose(y5, y7, atol=1e-4)
+    lora.enable_lora()
+    y5 = lora(x)
+    assert torch.allclose(y3, y5, atol=1e-4)
 
-#     removed = lora.remove_lora()
-#     y8 = removed(x)
-#     assert torch.allclose(y1, y8, atol=1e-4)
+    merged = lora.merge_lora(inplace=False)
+    assert not isinstance(merged, LoRA)
+    y6 = merged(x)
+    assert torch.allclose(y5, y6, atol=1e-4)
+
+    lora_copy = deepcopy(lora)
+    merged2 = lora_copy.merge_lora(inplace=True)
+    assert not isinstance(merged2, LoRA)
+    y7 = merged2(x)
+    assert torch.allclose(y5, y7, atol=1e-4)
+
+    removed = lora.remove_lora()
+    y8 = removed(x)
+    assert torch.allclose(y1, y8, atol=1e-4)

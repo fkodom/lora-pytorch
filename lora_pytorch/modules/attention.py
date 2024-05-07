@@ -4,7 +4,6 @@ from copy import deepcopy
 from typing import NamedTuple, Optional
 
 import torch
-from einops import einsum
 from torch import Tensor, nn
 
 from lora_pytorch.modules.base import BaseLoRAModule
@@ -62,15 +61,15 @@ class MultiheadAttentionLoRAModule(BaseLoRAModule[nn.MultiheadAttention]):
         # - o: output channels
         # - i: input channels
         # - r: rank
-        return einsum(self.q_out.weight, self.q_in.weight, "o r, r i -> i o")
+        return torch.einsum("o r, r i -> i o", self.q_out.weight, self.q_in.weight)
 
     @property
     def k_proj_weight(self) -> Tensor:
-        return einsum(self.k_out.weight, self.k_in.weight, "o r, r i -> i o")
+        return torch.einsum("o r, r i -> i o", self.k_out.weight, self.k_in.weight)
 
     @property
     def v_proj_weight(self) -> Tensor:
-        return einsum(self.v_out.weight, self.v_in.weight, "o r, r i -> i o")
+        return torch.einsum("o r, r i -> i o", self.v_out.weight, self.v_in.weight)
 
     @property
     def in_proj_weight(self) -> Optional[Tensor]:
@@ -83,10 +82,8 @@ class MultiheadAttentionLoRAModule(BaseLoRAModule[nn.MultiheadAttention]):
 
     @property
     def out_proj(self) -> OutProj:
-        return OutProj(
-            weight=einsum(self.o_out.weight, self.o_in.weight, "o r, r i -> o i"),
-            bias=self.o_out.bias,
-        )
+        weight = torch.einsum("o r, r i -> o i", self.o_out.weight, self.o_in.weight)
+        return OutProj(weight=weight, bias=self.o_out.bias)
 
     def _reset_parameters(self):
         # NOTE: The original LoRA paper recommends multiplying the output of 'in_proj'
