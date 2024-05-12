@@ -59,7 +59,7 @@ class LoRA(nn.Module, Generic[ModuleType]):
 
         return y
 
-    def parameters(self) -> Iterable[nn.Parameter]:
+    def parameters(self) -> Iterable[nn.Parameter]:  # type: ignore[override]
         def _get_lora_parameters(module: nn.Module):
             parameters = chain(
                 *[_get_lora_parameters(child) for child in module.children()]
