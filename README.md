@@ -103,6 +103,7 @@ assert isinstance(original_model, ResNet)
 Layer | Supported
 --- | ---
 `nn.Linear` | ✅
+`nn.Embedding` | ✅
 `nn.MultiheadAttention` | ✅
 `nn.TransformerEncoder` | ✅
 `nn.TransformerEncoderLayer` | ✅

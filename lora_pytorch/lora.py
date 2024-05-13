@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from itertools import chain
 from typing import (
-    Any,
     Generic,
+    Iterable,
     Literal,
     NamedTuple,
     Optional,
@@ -26,6 +27,7 @@ from lora_pytorch.modules.conv import (
     Conv3dLoRAModule,
     ConvType,
 )
+from lora_pytorch.modules.embedding import EmbeddingLoRAModule
 from lora_pytorch.modules.linear import LinearLoRAModule
 
 ModuleType = TypeVar("ModuleType", bound=nn.Module)
@@ -57,10 +59,17 @@ class LoRA(nn.Module, Generic[ModuleType]):
 
         return y
 
-    def parameters(self, recurse: bool = True) -> Any:
-        if self.lora_module is None:
-            return []
-        return self.lora_module.parameters(recurse=recurse)
+    def parameters(self) -> Iterable[nn.Parameter]:  # type: ignore[override]
+        def _get_lora_parameters(module: nn.Module):
+            parameters = chain(
+                *[_get_lora_parameters(child) for child in module.children()]
+            )
+            if isinstance(module, LoRA) and module.lora_module is not None:
+                parameters = chain(parameters, module.lora_module.parameters())
+
+            return parameters
+
+        return _get_lora_parameters(self)
 
     def enable_lora(self) -> None:
         return enable_lora(self)  # type: ignore
@@ -118,6 +127,20 @@ class LoRA(nn.Module, Generic[ModuleType]):
         return LoRA(module, lora_module)
 
     @classmethod
+    def _from_embedding(cls, module: nn.Embedding, rank: int) -> LoRA[nn.Embedding]:
+        num_embeddings, embedding_dim = module.weight.shape
+        device = module.weight.device
+        dtype = module.weight.dtype
+        lora_module = EmbeddingLoRAModule(
+            num_embeddings=num_embeddings,
+            embedding_dim=embedding_dim,
+            rank=rank,
+            device=device,
+            dtype=dtype,
+        )
+        return LoRA(module, lora_module)
+
+    @classmethod
     def _from_multihead_attention(
         cls, module: nn.MultiheadAttention, rank: int
     ) -> MultiheadAttentionLoRA:
@@ -165,6 +188,8 @@ class LoRA(nn.Module, Generic[ModuleType]):
             return LoRA._from_linear(module, rank)  # type: ignore
         elif isinstance(module, (nn.Conv1d, nn.Conv2d, nn.Conv3d)):
             return LoRA._from_conv(module, rank)  # type: ignore
+        elif isinstance(module, nn.Embedding):
+            return LoRA._from_embedding(module, rank)
         elif isinstance(module, nn.MultiheadAttention):
             return LoRA._from_multihead_attention(module, rank)  # type: ignore
 
